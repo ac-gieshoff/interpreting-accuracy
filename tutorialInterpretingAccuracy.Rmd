@@ -62,14 +62,6 @@ plotPath = "specify where you would like to store plots"
 ```
 
 
-```{r paths, echo=F, message=FALSE, warning=FALSE, include=F, results='hide'}
-# specify the paths where you saved your rating tables and where you would like to store plots, and RData
-# Hidden for data for data protection
-inputPath= "U:/Publikationen/interpreting accuracy/data anonymous"
-outputPath ="U:/Publikationen/interpreting accuracy/output"
-plotPath = "U:/Publikationen/interpreting accuracy/plot"
-```
-
 
 
 # Preprocessing
