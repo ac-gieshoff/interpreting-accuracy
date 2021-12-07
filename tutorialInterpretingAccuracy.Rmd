@@ -1,0 +1,866 @@
+---
+title: 'Interpreting accuracy revisited: A refined approach to propositional analysis'
+author: "gies"
+date: "29 4 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE, warning=F}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Introduction
+This script refers to the following publication [publication]. Please refer to this publication whenever you use this script, as well as for any further information.
+For reasons of data protection, this tutorial does not include actual data. The intention is to provide the necessary tools to reproduce similar plots and analyses on different data sets. However, the script still follows the structure of the aforementioned publication to enhance clarity.
+
+## A short description of the rating tables
+Interpreting accuracy is a method to asses the consistency and completeness of an interpretation by comparing each item (something like a meaning unit) of the interpretation to the corresponding item of the source text.
+
+In our case, the rating tables contain the following columns:
+1) "identifier": identifying number of each unit. Units follow the order of their appearance in the source text, i.e. the first unit is also the first one in the table, etc.. "identifier" can therefore be used as a "time line" of the source text.
+2) "sentence": whole sentence of an item. The column  "Sentence" is only relevant in so far as it may provide some orientation as to the co-text of the unit.
+3) "unit": The unit that is rated. "Unit" can be used to extract specific speech segments that may prove relevant during the analysis.
+4) "rating": 0 or 1, dependent variable
+5) "category": category of the item
+6) "weighing": weighing of the category
+7) "score": score as computed in the excel-file
+8) "episode": thematic section of a source text
+
+## Necessary packages and several definitions
+This script requires the following packages: readxl, dplyr, ggplot2, coin, ggpubr, rstatix, itsadug, mgcv. Make sure to install them before you run the script.
+
+We first start by loading the packages, defining some colors, variables, labels, etc which will help us to create nice plots later on. 
+
+```{r packages, message=FALSE, warning=FALSE, echo=F, results='hide'}
+# load packages that we need immediately
+packages<-c("ggplot2", "tidyverse", "readxl", "rstatix")
+lapply(packages, require, character.only = TRUE)
+
+# define colors
+color1="steelblue4" 
+color2="gray80"
+
+# define labels for variables in plots
+var1 = "students"
+var2 = "professionals"
+
+# breaks - this should correspond to your dataset
+brks =c("student", "professional")
+```
+
+In the following chunks, you can specify the paths to load the rating tables and to save plots and other outputs:
+
+* inputPath: path to your rating tables
+* outputPath: path for outputs like working environments (RData) and tables
+* plotPath: path to your plots
+```{r}
+# specify the paths where you saved your rating tables and where you would like to store plots, and RData
+inputPath= "specify path to ratings tables here"
+outputPath ="specify path to R environments"
+plotPath = "specify where you would like to store plots"
+```
+
+
+```{r paths, echo=F, message=FALSE, warning=FALSE, include=F, results='hide'}
+# specify the paths where you saved your rating tables and where you would like to store plots, and RData
+# Hidden for data for data protection
+inputPath= "U:/Publikationen/interpreting accuracy/data anonymous"
+outputPath ="U:/Publikationen/interpreting accuracy/output"
+plotPath = "U:/Publikationen/interpreting accuracy/plot"
+```
+
+
+
+# Preprocessing
+Data set 1 includes in total 20 accuracy ratings; the independent variable is "expertise". 
+
+In this section, we load the data and create the necessary variables. We will call our data set simply "dataset1".
+Tip: Make sure you close all tables before running this chunk. Otherwise it will throw an error.
+
+```{r load data, warning=F, echo=F, message=F}
+#define the path 
+setwd(inputPath)
+
+#create a list with all relevant files. Ratings tables are excel-tables, so files should end with "xlsx". You may change this if for instance you worked #on csv-files. 
+filelist<-list.files(path=inputPath, recursive = F, pattern = ".csv$", full.names =T)
+
+#read excel-files from input folder
+datalist<-list()
+for(file in filelist){
+  #read the table. You can specify in the brackets, which lines or columns to read
+  data<-read_csv2(file, col_names=T, trim_ws=T)
+  #if necessary specify column names
+  colnames(data)<-c("identifier", "sentence", "unit", "rating","rerating", "category", "weighing", "score", "episode")
+  
+  #' add the file name. It allows us to creates the participant variables later on
+  data$filename<-basename(file)
+  
+  datalist[[file]]<-data
+}
+# put every thing together
+dataset1<-do.call("rbind", datalist)
+
+#This is our data
+head(dataset1)
+```
+
+
+## Create variables
+We retrieve the information to construct the variables from the file name. In this data set, the file name was constructed as follows: participant_expertise.xlsx. We will extract the first part as participant variable and the second one for the a variable expertise.
+
+
+```{r variables}
+dataset1$participant = sub("_.*$", "", dataset1$filename) #extract string until first underscore= participant name
+dataset1$expertise = gsub("^.*_(.*)\\..*", "\\1", dataset1$filename)#extract string between first underscore and dot = expertise
+
+head(dataset1)
+```
+
+Let's briefly check the data set: Are there any values in rating not available? Are all participants included? Was any participant not imported correctly or not assigned to the correct variables?
+
+```{r sanity check}
+#check whether there is missing data 
+tapply(dataset1$rating,dataset1$participant, function(x){length(which(is.na(x)))})
+#delete missing data just in case
+dataset1 = dataset1[!is.na(dataset1$rating),]
+#show number of units per participant
+ftable(dataset1$participant, dataset1$expertise)
+# show number of units in each category in the source text
+ftable(dataset1$participant, dataset1$category)
+```
+
+
+## Formatize variables
+Usually, all variables should have been formatted correctly while reading the data tables. However, sometimes errors can occur. We therefore convert variables into  the correct format, i.e. numerical variables to numerical, characters to factors, etc. 
+```{r formatize variables, echo=F, message=FALSE, include=F, results='hide'}
+# lapply is used to perform the same operation on different columns. 
+
+# participant, expertise, identifier and episode should be categorical variables and factors
+cols<-c("participant","expertise","identifier", "episode")
+# turn into factor
+dataset1[cols]<-lapply(dataset1[cols], factor)
+
+# rating, weighing and score should be numerical values
+cols <- c("rating", "rerating","weighing", "score")
+# convert rating, weighing and score into numerical values
+dataset1[cols]<- lapply(dataset1[cols], as.numeric)
+
+```
+This data set includes now all variables that are necessary to proceed with the analysis. We can save the work space so that we can more easily load the data later on. 
+```{r save image 1, warning=FALSE}
+# define the path
+setwd(outputPath)
+save.image("1_accuracyDataset1.RData")#save the tables created in R (easier to load afterwards)
+```
+
+# Analyses
+In this section, we generate global indicators of performance:
+
+1. Inter-rater reliability
+2. Total score and number of correctly rendered items
+3. Categories and units
+4. Effects over time
+
+## Inter-rater reliability
+Here, we calculate the intra-rater reliability between the first and the second rating. 
+```{r interrater reliability}
+require("irr")
+# intuitive approach (https://stats.stackexchange.com/questions/213743/test-retest-of-highly-skewed-dichotomous-variables)
+# remove rows with na
+dataset1 = dataset1[!is.na(dataset1$rating),]
+# set rating to logical
+dataset1[,c("rating", "rerating")]=lapply(dataset1[,c("rating", "rerating")], as.logical)
+# new column specifying whether the rating and rerating are the same
+dataset1$agreement = ifelse(dataset1$rating==dataset1$rerating, 1,0)
+# calculate percentage
+sum(dataset1$agreement, na.rm=T)/nrow(dataset1)
+
+# ICC is not based on simple correlation, but on variance. see also: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4913118/
+# Krippendorfs alpha: first convert dataset into a wide format (instead of long)
+datawide = dataset1[,c("rating", "rerating")]
+datawide = as.matrix(datawide)
+datawide2 = t(datawide)
+kripp.alpha(datawide2, "nominal")
+
+# alternative. "single" because further analyses are based on the first ratings, "two-way" because the rater was always the same
+icc(dataset1[,c("rating", "rerating")], "twoway", "agreement", "single")
+
+# normal correlation
+dataset1[,c("rating", "rerating")]=lapply(dataset1[,c("rating", "rerating")], as.numeric)
+cor.test(dataset1$rating, dataset1$rerating)
+
+```
+
+
+## Number  of correctly rendered items
+Here we will look at the items and how many of them were correctly rendered by the participants.
+
+```{r correct items, warning=FALSE}
+#create the table by aggregating the data
+numItems = aggregate(rating~participant+expertise, dataset1, sum)
+
+# define the path
+
+ggplot(numItems, aes(x=expertise, y=rating, fill=expertise))+
+  geom_boxplot(notch=F)+
+  # customize the colors and legend titles
+  scale_fill_manual(values = c(color1, color2), labels=c(var1, var2), breaks=brks)+
+  labs(x="condition", y="percentage items")+
+  ggtitle("number of correctly rendered units\n dataset1")+
+  theme_bw()+
+  # delete tick marks and text and x-axis (redundant with legend)
+  theme(plot.title = element_text(size=12), legend.title=element_text(size=12), legend.text=element_text(size=10),
+          axis.title.x=element_blank(), 
+          axis.text.x=element_text(size=10), axis.text.y=element_text(size=10),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+# specify title of your plot
+title="dataset1_numberUnits"
+# this line generates the whole file name with date and title. You can change the file extension to .tiff or .eps as requested by the journal.
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+# automatically saves file to the specified path. dpi=150 should be sufficient for publications
+ggsave(filename, dpi=300, width=6, height=4, units="in")
+
+```
+The boxplot suggests that in dataset 1 professionals rendered more items correctly than students.We can also test this difference more formally by comparing both groups with Man-whitney test:
+```{r correct items test}
+require("coin")
+coin::wilcox_test(rating~expertise, data=numItems)
+numItems %>% wilcox_effsize(rating~expertise)
+```
+The test confirms that the difference is statistically significant (Z=10, p<0.05, r=.64).
+
+## Total score
+We can calculate a total score per participant by adding up all scores per participant.We then plot the scores of both groups in a boxplot.
+Interpretation of a boxplot: 
+* the thick line in the middle corresponds to the median, 
+* the upper line of the box dots outside correspond to the third quartile
+* the lower line of the box corresponds to the first quartile
+* the whiskers extend to the 1.5 times of the interquartile range
+* dots above or below the whiskers are outliers
+
+```{r total score, warning=FALSE}
+# create the table by aggregating the data
+participants = aggregate(score~participant+expertise, dataset1, FUN="sum")
+# rename the last column for more clarity
+colnames(participants)[length(participants)]="totalScore"
+
+# This line allows us to generate quickly an overview over the total score
+tapply(participants$totalScore, participants$expertise, summary)
+
+
+ggplot(participants, aes(x=expertise, y=totalScore, fill=expertise))+
+  geom_boxplot(notch=F)+
+  scale_fill_manual(values = c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  labs(x="expertise", y="total score")+
+  ggtitle("total score per rendition\n dataset1")+
+  theme_bw()+
+  # delete tick marks and text and x-axis (redundant with legend)
+  theme(plot.title = element_text(size=12), legend.title=element_text(size=12), legend.text=element_text(size=10),
+          axis.title.x=element_blank(), 
+          axis.text.x=element_text(size=10), axis.text.y=element_text(size=10),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_totalScore"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title,".png")
+ggsave(filename, dpi=300, width=6, height=4, units="in")
+
+
+# same plot with percentages instead of score
+# we first calculate the maximum score. It corresponds to the sum of all weighings of one participant.
+maxScore = sum(dataset1$weighing[dataset1$participant==unique(dataset1$participant[1])], na.rm=T)
+participants$percentage = participants$totalScore/maxScore
+
+ggplot(participants, aes(x=expertise, y=percentage, fill=expertise))+
+  geom_boxplot(notch=F)+
+  scale_fill_manual(values = c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  labs(x="expertise", y="total score")+
+  ggtitle("percentage of points per rendition\n dataset1")+
+  theme_bw()+
+  # delete tick marks and text and x-axis (redundant with legend)
+  theme(plot.title = element_text(size=12), legend.title=element_text(size=12), legend.text=element_text(size=10),
+          axis.title.x=element_blank(), 
+          axis.text.x=element_text(size=10), axis.text.y=element_text(size=10),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_percentage"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title,".png")
+ggsave(filename, dpi=300, width=6, height=4, units="in")
+
+```
+Again, professionals seem to obtain a higher total score in our dataset.Is this difference statistically significant? We do the same test as above.
+```{r total score test}
+require("coin")
+coin::wilcox_test(totalScore~expertise, participants)
+participants %>% wilcox_effsize(totalScore~expertise)
+
+```
+The test confirms that the difference is statistically significant (Z=10, p<0.05, r=.62).
+
+## Analysis of units
+We can analyze whether some units were generally more difficult than others. To do so, we aggregate the number of correct renditions per unit.
+```{r units}
+#create the table by grouping and aggregating the data, i.e., we  simply add the ratings. 
+units = dataset1 %>%
+  select(identifier, expertise, category, rating) %>%
+  group_by(identifier, expertise) %>%
+  summarize(numberCorrect = sum(rating, na.rm=T), category = first(category)) %>%
+  ungroup()
+
+# extract outliers
+outliers = units %>% group_by(expertise) %>% identify_outliers(numberCorrect)
+#no outliers
+
+# obtain a summary. The summary gives us the median, mean and quartiles of correct renditions per unit
+sum=tapply(units$numberCorrect, units$expertise, summary)
+
+#extract the first quartile for professionals
+qqPro=sum[[1]][2]
+qqStud=sum[[2]][2]
+
+# check which items are below the 1st quartile and retrieve these rows
+lowAccuracyPro = units[which(units$numberCorrect<qqPro & units$expertise=="professional"), c("identifier", "category")]
+lowAccuracyStud = units[which(units$numberCorrect<qqStud & units$expertise=="student"), c("identifier", "category")]
+
+# how many items in each group are often not rendered correctly (or not al all)
+nrow(lowAccuracyPro)
+nrow(lowAccuracyPro[lowAccuracyPro$category %in% c("core", "cohesion"),])
+
+nrow(lowAccuracyStud)
+nrow(lowAccuracyStud[lowAccuracyStud$category %in% c("core", "cohesion"),])
+
+# retrieve the items. Interesting are in particular core items
+textPro=unique(dataset1$unit[dataset1$identifier %in% lowAccuracyPro$identifier & dataset1$category=="core"])
+textStud=unique(dataset1$unit[dataset1$identifier %in% lowAccuracyStud$identifier & dataset1$category=="core"])
+
+
+textPro
+textStud
+head(unit)
+```
+We have retrieved here the items that were generally challenging (low accuracy) for each group and may merit further discussion.
+
+
+## Information structure
+Do professional and novice interpreters prioritize information differently? Here, we will look at the number of correct renditions in each category. As the number of items in each category varies, we will calculate the percentage.
+
+```{r prioritization, warning=FALSE}
+
+#create the table by aggregating the data
+categories = dataset1 %>%
+  select(participant, expertise, category, rating) %>%
+  #add_count(totalCategory=category) %>%
+  group_by(participant, expertise, category) %>%
+  dplyr::summarize(numberCorrect = sum(rating, na.rm=T), totalCategory = n()) %>%
+  ungroup() %>%
+  filter(!is.na(category))%>%
+  mutate(percentage = numberCorrect/totalCategory)
+
+# generate an overview that shows minimum, maximum and median for each category
+aggregate(numberCorrect~category+expertise, categories, summary)
+aggregate(percentage~category+expertise, categories, summary)
+
+#plot data
+#rearrange order of facets
+categories$category = factor(categories$category, levels=c("core", "secondary", "redundant", "cohesion", "metadiscourse", "modulation", "filler"))
+#now plot
+ggplot(categories, aes(x=expertise, y=percentage, fill=expertise))+
+  geom_boxplot()+
+  #geom_barplot()+
+  scale_fill_manual(values = c(color1, color2), labels=c(var1, var2), breaks=brks)+
+  facet_wrap(~category)+
+  labs(x="expertise", y="percentage points")+
+  ggtitle("number of correctly rendered items in each category\ndataset1")+
+  theme_bw()+
+# delete tick marks and text and x-axis (redundant with legend)
+  theme(plot.title = element_text(size=14), legend.title=element_text(size=12), legend.text=element_text(size=12),
+          axis.title.x=element_blank(), axis.title.y = element_text(size=12),
+          axis.text.x=element_text(size=13), axis.text.y=element_text(size=14),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_category"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=150, width=12, height=8, units="in")
+
+```
+Professionals seem to render more items correctly than students generally, however the difference seems especially large for cohesive elements, core and secondary information.
+
+We can test these differences with a one-way repeated measures ANOVA (alternatively, we could use mixed models). We first test the assumptions before conducting the actual test:
+- are there outliers? If so, are they extreme and influential outliers?
+- Is the normality assumption violated?
+
+```{r prioritization test}
+require("rstatix")
+# test assumptions: outliers
+categories %>% group_by(category, expertise) %>% identify_outliers(percentage)
+# this table outputs any observation that is an outlier. In our case, we have three mild outliers, one extreme ones. After verification, these observations are not a measurement error. 
+
+# normality
+categories %>% group_by(category, expertise) %>% shapiro_test(percentage)
+# p > .05 suggests that the normality assumption is not violated
+
+m0 = anova_test(data = categories, dv = percentage, wid = participant, 
+                within = category, between=expertise)
+get_anova_table(m0)
+
+comparison <- categories %>%
+  group_by(category) %>%
+  pairwise_t_test(
+    percentage ~ expertise, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    ) 
+comparison
+
+categories %>% group_by(category) %>%
+  cohens_d(percentage ~ expertise, paired = T, var.equal=F)
+
+```
+For our data set, the results of the ANOVA suggest that category and expertise are significant, but not their interaction. This suggests that there are systematic differences between categories and expertise; an interaction between expertise and category does not explain significantly more variance. 
+
+We plot the effects.
+```{r prioritization plot}
+# see also: https://www.datanovia.com/en/lessons/repeated-measures-anova-in-r/
+require("ggpubr")
+
+ggboxplot(
+  categories, x="expertise", y="percentage",
+  fill="expertise", 
+  facet.by="category", ylim=c(0,1))+
+  stat_pvalue_manual(comparison, label="p.adj.signif", y.positio= 1)+
+  scale_fill_manual(values=c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))+
+  theme(axis.text.x = element_blank(), axis.ticks = element_blank())
+
+setwd(plotPath)
+title="dataset1_categories_anovaEffects"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=150, width=8, height=8, units="in")
+
+
+```
+
+
+## Effects over time
+In this section, we will look at interpreting accuracy and how it develops over time. In order to visualize interpreting accuracy over time, we will calculate two more variables: an "added_score" where we simply add up the score for each participant over time and "ratio_reached" which can be described as a standardized added score or more easily as the "loss of information". 
+
+```{r timeline, warning=FALSE, results='hide'}
+
+# retrieve the maximum totalscore. It corresponds simply to the sum of all weighings for one participant
+maxScore = sum(dataset1$weighing[dataset1$participant==unique(dataset1$participant[1])], na.rm=T)
+
+#create lists to be filled with 
+added_score = c()
+optimal_added_score = c()
+ratio_reached = c()
+
+#we will loop over dataset1, but only from the second row on. Therefore, we will pre-define the values of the first row.
+added_score[1] = dataset1$score[1]
+optimal_added_score[1] = dataset1$weighing[1]
+ratio_reached[1] = 1
+
+for(i in 2:nrow(dataset1)){
+  #print(i)
+  score = dataset1$score[i]
+  weighing = dataset1$weighing[i]
+  participant1 = dataset1$participant[i]
+  participant2 = dataset1$participant[i-1]
+  
+  #if is some NA, populate the values to the next row
+  if(is.na(score)){
+    #print("na")
+    added_score[i] = added_score[i-1]
+    optimal_added_score[i] = optimal_added_score[i-1]
+    ratio_reached[i] = ratio_reached[i-1]
+    
+    #if participant changes, start from new
+  }else if(participant1 != participant2){
+    #print("new participant")
+    added_score[i] = 0
+    optimal_added_score[i] = weighing
+    ratio_reached[i] = 1
+
+    #for all further rows within one participant: add up their score, add up optimal score and calculate ratio
+  }else{
+    #print("normal")
+    added_score[i] = added_score[i-1]+score
+    optimal_added_score[i] = weighing+optimal_added_score[i-1]
+    if(optimal_added_score[i]==0){
+      ratio_reached[i] = ratio_reached[i-1]
+    }else{
+      ratio_reached[i] = 1-(((maxScore-added_score[i])-(maxScore-optimal_added_score[i]))/maxScore)
+      
+    }
+    
+  }
+}
+dataset1$added_score = added_score
+dataset1$optimal_added_score = optimal_added_score
+dataset1$ratio_reached = ratio_reached
+```
+We will also add a numeric identifier that will help to produce cleaner plots and can serve as "timeline". 
+```{r save image 2, warning=FALSE, results='hide'}
+
+#for visualization purposes, add another identifier, this time numeric
+dataset1$id<-as.numeric(dataset1$identifier)
+
+setwd(outputPath)
+# after having created these new variables, we save the working environment again.
+save.image("2_accuracyDataset1.RData")
+```
+Now, we create an "optimal interpretation", i.e. a rendition that fulfills all items. This will serve us only for plotting.
+```{r optimal rendition, warning=FALSE}
+# the "optimal renditions" corresponds to a rendition with only the value 1 as rating
+#we can simply take the subset of the first participant and modify the values accordingly
+optimum = split(dataset1, dataset1$participant)[[1]]
+
+#modify the values accordingly
+optimum$participant="optimum"
+optimum$filename=NA
+optimum$expertise=NA
+
+#set all ratings to 1
+optimum$rating<-1
+#recalculate scores
+optimum$score<-optimum$rating*optimum$weighing
+
+# create id variable
+optimum$id<-c(1:nrow(optimum))
+
+# initiate vectors
+added_score=c()
+optimal_added_score=c()
+ratio_reached=c()
+
+#calculate again added score and ratio_reached 
+added_score[1]=optimum$score[1]
+optimal_added_score[1]=optimum$score[1]
+ratio_reached[1]=1
+
+for(i in 2:nrow(optimum)){
+  score=optimum$score[i]
+  
+   if(is.na(score)){
+    #print("na")
+    added_score[i] = added_score[i-1]
+    optimal_added_score[i] = optimal_added_score[i-1]
+    ratio_reached[i] = ratio_reached[i-1]
+    
+  #for all further rows within one participant: add up their score, add up optimal score and calculate ratio
+  }else{
+    #print("normal")
+    added_score[i] = added_score[i-1]+score
+    optimal_added_score[i] = score+optimal_added_score[i-1]
+    if(optimal_added_score[i]==0){
+      ratio_reached[i] = ratio_reached[i-1]
+    }else{
+      ratio_reached[i] = 1-(((maxScore-added_score[i])-(maxScore-optimal_added_score[i]))/maxScore)
+    }
+  
+  }
+}
+
+optimum$added_score = added_score
+optimum$optimal_added_score = optimal_added_score
+optimum$ratio_reached = ratio_reached
+
+```
+Now we can use our newly created variables for plotting. The first plot shows the added score, the red line is our ideal interpretation. The second plot represents the standardized added score (ratio_reached) with - again - the red line as ideal interpretation.
+```{r timeline plot}
+
+ggplot(dataset1, aes(x=id, y=added_score, color=expertise, group=expertise))+
+  scale_color_manual(values = c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  geom_point(size=0.08)+
+  geom_point(data=optimum, aes(x=id, y=added_score), color="red")+
+  labs(x="number of segment", y="added score")+
+  guides(colour = guide_legend(override.aes = list(size=5)))+
+  ggtitle("interpreting accuracy over time \ndataset1")+
+  theme_bw()+
+  theme(plot.title = element_text(size=16), legend.title=element_text(size=14), legend.text=element_text(size=14),
+          axis.title.x=element_blank(), axis.title.y = element_text(size=12),
+          axis.text.x=element_text(size=13), axis.text.y=element_text(size=14),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_lineplot_added_score"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=300, width=10, height=8, units="in")
+
+#here graph with ratio_reached
+ggplot(dataset1, aes(x=id, y=ratio_reached, color=expertise))+
+  scale_color_manual(values = c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  geom_point(size=0.08)+
+  geom_hline(aes(yintercept=1), color="red")+
+  labs(x="number of segment", y="ratio reached")+
+  guides(colour = guide_legend(override.aes = list(size=5)))+
+  ggtitle("interpreting accuracy over time \ndataset1")+
+  theme_bw()+
+  theme(plot.title = element_text(size=16), legend.title=element_text(size=14), legend.text=element_text(size=14),
+          axis.title.x=element_blank(), axis.title.y = element_text(size=12),
+          axis.text.x=element_text(size=13), axis.text.y=element_text(size=14),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_lineplot_ratio_reached"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=300, width=10, height=8, units="in")
+
+```
+It looks as if there was an effect of fatigue. At the beginning, students and professionals in both conditions do well, but with time the gap widens.
+This is not surprising: the beginning (and the end) are rather formulaic. It is plausible to assume that we will find differences more in the middle part. This is were the variable "episodes" comes in.
+
+### Comparison of episodes
+In order to compare the score obtained in each episode, we need first to aggregate the data for each participant and each episode. As the score you can reach in each episode is very different, we will again calculate the percentage.
+```{r episodes, warning=FALSE}
+episodes = data.frame(aggregate(score~participant+episode+expertise, dataset1, base::sum))
+maxScore = c(aggregate(weighing~participant+episode+expertise, dataset1, base::sum)[4])[[1]]
+episodes = cbind(episodes, maxScore=maxScore)
+
+#weighing is max score, so we can divide score by weighing to obtain teh percentage of points obtained
+episodes$percentage = episodes$score/episodes$maxScore
+
+#plot
+ggplot(episodes, aes(x=expertise, y=percentage, fill=expertise))+
+  facet_grid(~episode)+
+  geom_boxplot()+
+  scale_fill_manual(values = c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  theme_bw()+
+  labs(x="score", y="expertise")+
+  ggtitle("interpreting accuracy during different episodes\n7 dataset1")+
+  theme(plot.title = element_text(size=16), legend.title=element_text(size=14), legend.text=element_text(size=14),
+          axis.title.x=element_blank(), axis.title.y = element_text(size=12),
+          axis.text.x=element_text(size=11), axis.text.y=element_text(size=11),
+          strip.text = element_text(size = 14))
+
+setwd(plotPath)
+title="dataset1_episodes"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=300, width=12, height=8, units="in")
+
+```
+According to the boxplot, score of professionals and students differ in each episode.
+Now we can conduct a repeated measures anova to see whether this difference is significant.
+
+```{r episodes test}
+# see also: https://www.datanovia.com/en/lessons/repeated-measures-anova-in-r/
+# test assumptions: outliers
+episodes %>% group_by(episode) %>% identify_outliers(percentage)
+# this table outputs any observation that is an outlier. In our case, we have one mild outlier. After verification, this observation is not a measurement error. There are only three mild outlier which we can accept.
+
+# normality
+episodes %>% group_by(episode, expertise) %>% shapiro_test(percentage)
+# p > .05 suggests that the normality assumption is not violated
+
+m0 = anova_test(data = episodes, dv = percentage, wid = participant, 
+                within = episode, between=expertise)
+get_anova_table(m0)
+
+comparison <- episodes %>%
+  group_by(episode) %>%
+  pairwise_t_test(
+    percentage ~ expertise, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+comparison
+
+episodes %>% group_by(episode) %>%
+  cohens_d(percentage ~ expertise, paired = T, var.equal=F)
+
+
+require("ggpubr")
+
+ggboxplot(
+  episodes, x="expertise", y="percentage",
+  fill="expertise", 
+  facet.by="episode", ylim=c(0,1))+
+  stat_pvalue_manual(comparison, label="p.adj.signif", y.positio= 1)+
+  scale_fill_manual(values=c(color1, color2),  labels=c(var1, var2), breaks=brks)+
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))+
+  theme(axis.text.x = element_blank(), axis.ticks = element_blank())
+
+setwd(plotPath)
+title="dataset1_episodes_anovaEffects"
+filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+ggsave(filename, dpi=150, width=8, height=8, units="in")
+
+```
+
+
+### Additive generalized models
+Generalized linear models only allow a linear or exponential time effect. The effect of time, however, might be  "curvy" and different between participants. In this section, we therefore try generalized additive models which allow non-linear time patterns. As timeline we can use the identifier variable which indicates the progression of the text.
+Our dependent variable is "rating". As it is a binary variable, we will use generalized additive models (family specified as binomial). Modeling with REML allows us later on to compare models.  (fREML is faster, but does not allow comparison). Our question here is whether student interpreters differ from professional interpreters in their interpreting accuracy over time.
+NB: As the effects of expertise are already clearly established, additive models are "overkill" in this case. We use it only for the purpose of illustration.
+Please also refer to the excellent tutorial by Wieling, M. (2018). Analyzing dynamic phonetic data using generalized additive mixed modeling: A tutorial focusing on articulatory differences between L1 and L2 speakers of English. Journal of Phonetics, 70, 86–116. https://doi.org/10.1016/j.wocn.2018.03.002
+
+```{r additive models}
+require("mgcv")
+require("itsadug")
+
+# random intercepts : s(factor, bs="re")
+# random slope: s(factor, factor, bs="re")
+# non-linear random effect: s(factor, factor, bs="fs", m=1)
+# make sure that anything that should be a factor IS a factor
+
+# "null model". It estimates the probability of correct renditions over time for each group, i.e., a constant difference (intercept for expertise). Time is not included at this point.
+gam0 = gam(I(rating)~expertise, data=dataset1, family=binomial(link="logit"), method="ML")
+#summary (it can take time to compute)
+s0 = summary(gam0)
+
+# adding the time line. We use "id" as indicator for the timeline and thin plate regression ("bs=tp") to approximate the non-linear pattern. It works by combining # different linear functions, k indicates the max number of functions that can be combined for smoothing > the higher k, the "curvier" the non-linear pattern.
+# The model gm1 computes a non-linear pattern over time with separate intercepts for each group, i.e., this are two parallel non-linear patterns. 
+gam1= gam(I(rating)~expertise+s(id, bs="tp", k=10), data=dataset1, family=binomial(link="logit"), method="ML")
+s1 = summary(gam1)
+# In the summary "edf" reflects an estimate for the number of linear functions that are combined. edf close to the maximum k-1 (in our case 9) can indicate, that a higher k-parameter is needed. A formal test is possible with gam.check. If k-index is lower than 1 and p low, refit with k doubled
+s1
+
+
+# obviously, our pattern is really curvy.. (several steps are left out to save computation time)
+# gam1b = gam(I(rating)~expertise+s(id, bs="tp", k=160), data=dataset1, family=binomial(link="logit"), method="ML")
+# s1b = summary(gam1b)
+# gam.check(gam1b)
+
+# The model gm2 allows different patterns for professionals and students by specifying the "by" parameter. In order to save computation time, we will set k=40
+# with k=160 computations took over 30 minutes, at the same time the deviance explained increases by 5%
+gam2= gam(I(rating)~expertise+s(id, by=expertise, bs="tp", k=40), data=dataset1, family=binomial(link="logit"), method="ML")
+s2 = summary(gam2)
+
+# separate intercept (the systematic difference between students and professionals) and the non-linear pattern
+dataset1$expertiseOrdered = as.ordered(dataset1$expertise)
+contrasts(dataset1$expertiseOrdered) ="contr.treatment"
+gam2c = gam(I(rating)~expertiseOrdered+s(id) + s(id, by=expertiseOrdered, bs="tp", k=40), data=dataset1, family=binomial(link="logit"), method="ML")
+s2c = summary(gam2c)
+
+# add random intercepts for participants as data points are not independent (multiple observations per participant)
+gam3= gam(I(rating)~expertise+s(id, by=expertise, bs="tp", k=40)+ s(participant, bs="re"), data=dataset1, family=binomial(link="logit"), method="ML")
+s3 = summary(gam3)
+
+# add non-linear random effects for each participant. The non-linear term includes the random intercept. So we can drop it.
+gam4= gam(I(rating)~expertise+s(id, by=expertise, bs="tp", k=40)+ s(id, participant, bs="fs", m=1), data=dataset1, family=binomial(link="logit"), method="ML")
+s4 = summary(gam4)
+
+# as category indicates the "importance" of a unit in the speech, we should include category as a random effect, too
+dataset1$category=as.factor(dataset1$category) # turn category into factor
+gam5= gam(I(rating)~expertise+s(id, by=expertise, bs="tp", k=40)+s(id, participant, bs="fs", m=1)+s(category, bs="re"), data=dataset1, family=binomial(link="logit"), method="ML")
+s5 = summary(gam5)
+
+# here we include individual variation in rendering categories. Again,we can drop the random intercepts for category.
+gam6= bam(I(rating)~expertise+s(id, by=expertise, bs="tp", k=40)+s(id, participant, bs="fs", m=1)+s(category, by=participant, bs="re"), data=dataset1, family=binomial(link="logit"), method="ML")
+s6 = summary(gam6)
+compareML(gam5, gam6)
+
+# several other models are possible
+
+# an alternative, computationally more efficient formulation is the following:
+# dataset1$isStudent = ifelse(dataset1$expertise=="student", 1, 0)
+# gam5d = gam(I(rating)~isStudent + s(id, by=isStudent, bs="tp", k=40)+s(id, participant, bs="fs", m=1)+s(category, bs="re"), data=dataset1, # family=binomial(link="logit"), method="ML")
+# s5d = summary(gam5d)
+
+# compare modelss5d
+
+finalModel = gam5
+summary(finalModel)
+
+# extract deviance and residual degrees of freedom. If there are close, it is a good model
+finalModel$deviance
+finalModel$df.residual
+
+# How many data points would have been predicted correctly
+isFitted = ifelse(predict(finalModel, type="response")> 0.5, 1, 0)
+dataset1$isFitted = isFitted
+dataset1$fitCorrect = ifelse(dataset1$rating == dataset1$isFitted, 1, 0)
+
+sum(dataset1$fitCorrect)/nrow(dataset1)
+
+setwd(outputPath)
+save.image("3_accuracyDataset1.RData")
+
+
+```
+
+```{r plot additive models, warning=F}
+setwd(outputPath)
+# generate latex able for report
+modelTable = gamtabs(finalModel)
+
+# plots
+setwd(plotPath)
+title="additiveModel"
+filename=paste0(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+png(filename, width=10, height=8, units="in",res=150)
+plot_smooth(finalModel, view="id", plot_all="expertise", rug=F, rm.ranef=T, main="Effects of expertise on interpreting accuracy", col=c(color1, color2),xlab="time", ylab="log odds")
+
+# plot difference of smooth terms
+title="additiveModel_Diff"
+filename<-paste0(format(Sys.time(), "%Y_%b_%d"),title, ".png")
+png(filename, width=10, height=8, units="in",res=150)
+plot_diff(finalModel, view="id", plot_all="expertise", comp=list(expertise=brks), rug=F, rm.ranef=T, main="Effects of expertise on interpreting accuracy", col=c(color1, color2),xlab="time", ylab="log odds")
+
+dev.off()
+
+
+```
+Now we can extract the windows of significant difference
+```{r extract text, message=FALSE, warning=FALSE}
+plot_smooth(finalModel, view="id", plot_all="expertise", rug=F, rm.ranef=T, main="Effects of expertise on interpreting accuracy", col=c(color1, color2),xlab="time", ylab="log odds")
+# save plot_diff as data
+p=plot_diff(finalModel, view="id", plot_all="expertise", comp=list(expertise=c("student","professional")), rug=F, rm.ranef=T, main="Effects of expertise on interpreting accuracy", col=c(color1, color2),xlab="time", ylab="log odds")
+
+# calculate in which windows there is a significant difference. "significant difference" means here that the confidence band is either completely below or above 0.
+
+p$upper = p$est+p$CI # upper end
+p$lower = p$est-p$CI # lower end
+
+p$inOneHalf = ifelse(p$upper < 0 & p$lower<0 | p$upper> 0 & p$lower >0, T,F)
+
+# we want to extract the range of identifiers; i.e. not only the value 5 and 10, but all the values from 5 to 10.
+# the print statements can help to identify errors
+
+previousVal = F
+rangeID =c()
+j=1
+ids=c()
+for(i in 2:nrow(p)){
+
+  row = p[i,]
+  previousRow = p[i-1,]
+  
+  id = round(row$id, digit=0)
+  #print(paste("i is ", i, "id is ",id))
+  val = row$inOneHalf
+  previousVal = previousRow$inOneHalf
+  
+  #if both, the previous and the current identifiers are below or above 0...
+  if(val ==T & previousVal==T){
+    # print("range")
+    ids = c(ids, id)
+    #print(ids)
+    #...we want to retrieve all units that are between those identifiers
+    rangeID = c(rangeID, seq(min(ids), max(ids)))
+    # print(rangeID)
+    j = j+1
+    ids = c()
+    # if only thecurrent value is relevant,
+  }else if(val==T & previousVal==F){
+    #print("new range")
+    # we start a new series
+    ids = c(ids, id)
+    #print(ids)
+  }else{
+    # otherwise we jump to the next row
+    #print("next")
+    next
+  }
+
+}
+
+
+
+textSegments = unique(dataset1[dataset1$id %in% rangeID, c("unit", "id")])
+textSegments
+
+```
+
