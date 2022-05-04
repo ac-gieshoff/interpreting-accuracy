@@ -64,17 +64,6 @@ outputPath ="specify path to R environments"
 plotPath = "specify where you would like to store plots"
 ```
 
-
-```{r paths, echo=F, message=FALSE, warning=FALSE, include=F, results='hide'}
-# specify the paths where you saved your rating tables and where you would like to store plots, and RData
-# Hidden for data for data protection
-inputPath= "U:/PUBLIKATIONEN/Perspectives - interpreting accuracy/data anonymous"
-outputPath ="U:/PUBLIKATIONEN/Perspectives - interpreting accuracy/output"
-plotPath = "U:/PUBLIKATIONEN/Perspectives - interpreting accuracy/plot"
-```
-
-
-
 # Preprocessing
 Data set 1 includes in total 20 accuracy ratings; the independent variable is "expertise". 
 
