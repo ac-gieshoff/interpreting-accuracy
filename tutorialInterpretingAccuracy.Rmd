@@ -1,6 +1,6 @@
 ---
 title: 'Interpreting accuracy revisited: A refined approach to propositional analysis'
-author: "NN"
+author: "Anne Catherine Gieshoff"
 date: "10 12 2021"
 output: html_document
 ---
@@ -11,8 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Introduction
-This script refers to the following publication [publication]. Please refer to this publication whenever you use this script, as well as for any further information.
-The aim of this script is to provide the necessary tools to reproduce similar plots and analyses on different data sets. An anonymized version of the data set is available at [link]
+This script refers to the following publication Gieshoff, A.C., Albl-Mikasa, M. (in press). "Iinterpreting accuracy: A refined approach to interpreting performance analysis" Perspectives. Please refer to this publication whenever you use this script, as well as for any further information.
+The aim of this script is to provide the necessary tools to reproduce similar plots and analyses on different data sets. An anonymized version of the data set is available at 10.5281/zenodo.5764021.
 The script follows the structure of the aforementioned publication to enhance clarity.
 
 ## A short description of the rating tables
