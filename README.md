@@ -1,6 +1,6 @@
 # interpreting-accuracy
 cff-version: 1.2.0
-message: "If you use this software, please cite it as below."
+message: "If you use this script, please cite it as below."
 authors:
 - family-names: "Gieshoff"
   given-names: "Anne Catherine"
