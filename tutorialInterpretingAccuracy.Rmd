@@ -1,5 +1,5 @@
 ---
-title: 'Interpreting accuracy revisited: A refined approach to propositional analysis'
+title: 'Interpreting accuracy revisited: A refined approach to propositional analysis. R script.'
 author: "Anne Catherine Gieshoff"
 date: "10 12 2021"
 output: html_document
@@ -11,9 +11,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Introduction
-This script refers to the following publication Gieshoff, A.C., Albl-Mikasa, M. (in press). "Iinterpreting accuracy: A refined approach to interpreting performance analysis" Perspectives. Please refer to this publication whenever you use this script, as well as for any further information.
+This cript refers to the following publication Gieshoff, A.C., Albl-Mikasa, M. (in press). "Interpreting accuracy: A refined approach to interpreting performance analysis" Perspectives. https://doi.org/10.1080/0907676X.2022.2088296. Please refer to this publication whenever you use this script, as well as for any further information.
 The aim of this script is to provide the necessary tools to reproduce similar plots and analyses on different data sets. An anonymized version of the data set is available at 10.5281/zenodo.5764021.
 The script follows the structure of the aforementioned publication to enhance clarity.
+The format of the script is R Markdown (.Rmd).
 
 ## A short description of the rating tables
 Interpreting accuracy is a method to asses the consistency and completeness of an interpretation by comparing each meaning (unit) of the interpretation to the corresponding unit of the source text.
@@ -57,6 +58,7 @@ In the following chunks, you can specify the paths to load the rating tables and
 * inputPath: path to your rating tables
 * outputPath: path for outputs like working environments (RData) and tables
 * plotPath: path to your plots
+
 ```{r}
 # specify the paths where you saved your rating tables and where you would like to store plots, and RData
 inputPath= "specify path to ratings tables here"
@@ -74,7 +76,7 @@ Tip: Make sure you close all tables before running this chunk. Otherwise it will
 #define the path 
 setwd(inputPath)
 
-#create a list with all relevant files. Ratings tables are excel-tables, so files should end with "xlsx". You may change this if for instance you worked #on csv-files. 
+#create a list with all relevant files. Ratings tables are excel-tables, so files should end with ".csv". You may change this if for instance you worked with xlsx-files. 
 filelist<-list.files(path=inputPath, recursive = F, pattern = ".csv$", full.names =T)
 
 #read excel-files from input folder
@@ -139,15 +141,16 @@ cols <- c("rating", "rerating","weighing", "score")
 dataset1[cols]<- lapply(dataset1[cols], as.numeric)
 
 ```
-This data set includes now all variables that are necessary to proceed with the analysis. We can save the work space so that we can more easily load the data later on. 
+This data set includes now all variables that are necessary to proceed with the analysis. We can save the working space so that we can more easily load the data later on. 
 ```{r save image 1, warning=FALSE}
 # define the path
 setwd(outputPath)
-save.image("1_accuracyDataset1.RData")#save the tables created in R (easier to load afterwards)
+#save the tables created in R (easier to load afterwards)
+save.image("1_accuracyDataset1.RData")
 ```
 
 # Analyses
-In this section, we generate global indicators of performance:
+In this section, we calculate the inter-rater and intra-rater reliability and generate global indicators of performance. The section is divided into 4 sub-sections:
 
 1. Inter-rater reliability
 2. Total score and number of correctly rendered items
@@ -188,15 +191,14 @@ kappa2(dataset1[,c("rating", "rerating")])
 # pearson's r
 dataset1[,c("rating", "rerating")]=lapply(dataset1[,c("rating", "rerating")], as.numeric)
 cor.test(dataset1$rating, dataset1$rerating)
-# correlation coefficient around 0.87, independent from the method applied (Krippendorf's alpha, icc, pearon, spearman, kendall)
-
 ```
-The level of agreement is generally very good: The percentage of agreement between the first and second rating is 94%; the correlation coefficients are around 0.87, regardless of the method applied.
 
 ### Inter-rater reliability and agreement
 We use the same calculations as above.
 ```{r inter-rater reliability}
+# change column name for clarity
 colnames(dataset1)[which(names(data)=="rating 2")]="rater2"
+# load necessary package
 require("irr")
 # percentage of agreement 
 # set rating to logical
@@ -221,8 +223,6 @@ kappa2(dataset1[,c("rating", "rater2")])
 # pearson's r
 dataset1[,c("rating", "rater2")]=lapply(dataset1[,c("rating", "rater2")], as.numeric)
 cor.test(dataset1$rating, dataset1$rater2)
-# correlation coefficient around 0.87, independent from the method applied (Krippendorf's alpha, icc, pearon, spearman, kendall)
-
 ```
 
 ## Number  of correctly rendered items
@@ -256,13 +256,12 @@ filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
 ggsave(filename, dpi=300, width=6, height=4, units="in")
 
 ```
-The boxplot suggests that in dataset 1 professionals rendered more items correctly than students.We can also test this difference more formally by comparing both groups with Man-whitney test:
+The boxplot suggests that in dataset 1 professionals rendered more items correctly than students. We can also test this difference more formally by comparing both groups with a Wilcoxon signed rank test:
 ```{r correct items test}
 require("coin")
 coin::wilcox_test(rating~expertise, data=numItems)
 numItems %>% wilcox_effsize(rating~expertise)
 ```
-The test confirms that the difference is statistically significant (*Z*=10, *p*<0.05, *r*=.64).
 
 ## Total score
 We can calculate a total score per participant by adding up all scores per participant. Subsequently, we plot the scores of both groups in a boxplot.
@@ -331,7 +330,6 @@ coin::wilcox_test(totalScore~expertise, participants)
 participants %>% wilcox_effsize(totalScore~expertise)
 
 ```
-The test confirms that the difference is statistically significant (*Z*=10, *p*<0.05, *r*=.62).
 
 ## Analysis of units
 We can analyze whether some units were generally more difficult than others. To do so, we aggregate the number of correct renditions per unit.
@@ -345,7 +343,6 @@ units = dataset1 %>%
 
 # extract outliers
 outliers = units %>% group_by(expertise) %>% identify_outliers(numberCorrect)
-#no outliers
 
 # obtain a summary. The summary gives us the median, mean and quartiles of correct renditions per unit
 sum=tapply(units$numberCorrect, units$expertise, summary)
@@ -368,7 +365,6 @@ nrow(lowAccuracyStud[lowAccuracyStud$category %in% c("core", "cohesion"),])
 # retrieve the items. Interesting are in particular core items
 textPro=unique(dataset1$unit[dataset1$identifier %in% lowAccuracyPro$identifier & dataset1$category=="core"])
 textStud=unique(dataset1$unit[dataset1$identifier %in% lowAccuracyStud$identifier & dataset1$category=="core"])
-
 
 textPro
 textStud
@@ -401,7 +397,6 @@ categories$category = factor(categories$category, levels=c("core", "secondary", 
 #now plot
 ggplot(categories, aes(x=expertise, y=percentage, fill=expertise))+
   geom_boxplot()+
-  #geom_barplot()+
   scale_fill_manual(values = c(color1, color2), labels=c(var1, var2), breaks=brks)+
   facet_wrap(~category)+
   labs(x="expertise", y="percentage points")+
@@ -419,7 +414,6 @@ filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
 ggsave(filename, dpi=150, width=12, height=8, units="in")
 
 ```
-Professionals seem to render more items correctly than students generally, however the difference seems especially large for cohesive elements, core and secondary information.
 
 We can test these differences with a one-way repeated measures ANOVA (alternatively, we could use mixed models). We first test the assumptions before conducting the actual test:
 - are there outliers? If so, are they extreme and influential outliers?
@@ -451,8 +445,6 @@ categories %>% group_by(category) %>%
   cohens_d(percentage ~ expertise, paired = T, var.equal=F)
 
 ```
-For our data set, the results of the ANOVA suggest that category and expertise are significant, but not their interaction. This suggests that there are systematic differences between categories and expertise; an interaction between expertise and category does not explain significantly more variance. 
-
 We plot the effects.
 ```{r prioritization plot}
 # see also: https://www.datanovia.com/en/lessons/repeated-measures-anova-in-r/
@@ -471,10 +463,7 @@ setwd(plotPath)
 title="dataset1_categories_anovaEffects"
 filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
 ggsave(filename, dpi=150, width=8, height=8, units="in")
-
-
 ```
-
 
 ## Effects over time
 In this section, we will look at interpreting accuracy and how it develops over time. In order to visualize interpreting accuracy over time, we will calculate two more variables: an "added_score" where we simply add up the score for each participant over time and "ratio_reached" which can be described as a standardized added score or more easily as the "loss of information". 
@@ -641,17 +630,15 @@ filename<-paste(format(Sys.time(), "%Y_%b_%d"),title, ".png")
 ggsave(filename, dpi=300, width=10, height=8, units="in")
 
 ```
-It looks as if there was an effect of fatigue. At the beginning, students and professionals in both conditions do well, but with time the gap widens.
-This is not surprising: the beginning (and the end) are rather formulaic. It is plausible to assume that we will find differences more in the middle part. This is were the variable "passages" comes in.
 
 ### Comparison of passages
-In order to compare the score obtained in each passage, we need first to aggregate the data for each participant and each passage As the maximum score you can reach in each passage is very different, we will again calculate the score as percentage.
+In order to compare the score obtained in each passage, we need first to aggregate the data for each participant and each passage. As the maximum score you can reach in each passage is different, we will again calculate the score as percentage.
 ```{r passages, warning=FALSE}
 passages = data.frame(aggregate(score~participant+passage+expertise, dataset1, base::sum))
 maxScore = c(aggregate(weighing~participant+passage+expertise, dataset1, base::sum)[4])[[1]]
 passages = cbind(passages, maxScore=maxScore)
 
-#weighing is max score, so we can divide score by weighing to obtain teh percentage of points obtained
+#weighing is max score, so we can divide score by weighing to obtain the percentage of points obtained
 passages$percentage = passages$score/passages$maxScore
 
 #plot
@@ -741,15 +728,14 @@ gam0 = gam(I(rating)~expertise, data=dataset1, family=binomial(link="logit"), me
 #summary (it can take time to compute)
 s0 = summary(gam0)
 
-# adding the time line. We use "id" as indicator for the timeline and thin plate regression ("bs=tp") to approximate the non-linear pattern. It works by combining # different linear functions, k indicates the max number of functions that can be combined for smoothing > the higher k, the "curvier" the non-linear pattern.
-# The model gm1 computes a non-linear pattern over time with separate intercepts for each group, i.e., this are two parallel non-linear patterns. 
+# adding the time line. We use "id" as indicator for the timeline and thin plate regression ("bs=tp") to approximate the non-linear pattern. It works by combining different linear functions, k indicates the max number of functions that can be combined for smoothing > the higher k, the "curvier" the non-linear pattern.
+# The model gam1 computes a non-linear pattern over time with separate intercepts for each group, i.e., this are two parallel non-linear patterns. 
 gam1= gam(I(rating)~expertise+s(id, bs="tp", k=10), data=dataset1, family=binomial(link="logit"), method="ML")
 s1 = summary(gam1)
 # In the summary "edf" reflects an estimate for the number of linear functions that are combined. edf close to the maximum k-1 (in our case 9) can indicate, that a higher k-parameter is needed. A formal test is possible with gam.check. If k-index is lower than 1 and p low, refit with k doubled
 s1
 
-
-# obviously, our pattern is really curvy.. we could increase k and set it even to 160, but in order to save computation time, we don't do it here. 
+# obviously, our pattern is really curvy... we could increase k and set it even to 160, but in order to save computation time, we don't do it here. 
 # gam1b = gam(I(rating)~expertise+s(id, bs="tp", k=160), data=dataset1, family=binomial(link="logit"), method="ML")
 # s1b = summary(gam1b)
 # gam.check(gam1b)
@@ -790,7 +776,7 @@ compareML(gam5, gam6)
 # gam5d = gam(I(rating)~isStudent + s(id, by=isStudent, bs="tp", k=40)+s(id, participant, bs="fs", m=1)+s(category, bs="re"), data=dataset1, # family=binomial(link="logit"), method="ML")
 # s5d = summary(gam5d)
 
-# compare modelss5d
+# compare models
 
 finalModel = gam5
 summary(finalModel)
@@ -808,8 +794,6 @@ sum(dataset1$fitCorrect)/nrow(dataset1)
 
 setwd(outputPath)
 save.image("3_accuracyDataset1.RData")
-
-
 ```
 
 ```{r plot additive models, warning=F}
@@ -831,8 +815,6 @@ png(filename, width=10, height=8, units="in",res=150)
 plot_diff(finalModel, view="id", plot_all="expertise", comp=list(expertise=brks), rug=F, rm.ranef=T, main="Effects of expertise on interpreting accuracy", col=c(color1, color2),xlab="time", ylab="log odds")
 
 dev.off()
-
-
 ```
 Now we can extract the windows of significant difference
 ```{r extract text, message=FALSE, warning=FALSE}
@@ -892,6 +874,5 @@ for(i in 2:nrow(p)){
 
 textSegments = unique(dataset1[dataset1$id %in% rangeID, c("unit", "id")])
 textSegments
-
 ```
-
+That's all there is.
