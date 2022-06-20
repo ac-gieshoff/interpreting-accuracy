@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 # Introduction
-This cript refers to the following publication Gieshoff, A.C., Albl-Mikasa, M. (in press). "Interpreting accuracy: A refined approach to interpreting performance analysis" Perspectives. https://doi.org/10.1080/0907676X.2022.2088296. Please refer to this publication whenever you use this script, as well as for any further information.
+This script refers to the following publication Gieshoff, A.C., Albl-Mikasa, M. (2022). "Interpreting accuracy: A refined approach to interpreting performance analysis" Perspectives [online-first publication]. https://doi.org/10.1080/0907676X.2022.2088296. Please refer to this publication whenever you use this script, as well as for any further information. 
 The aim of this script is to provide the necessary tools to reproduce similar plots and analyses on different data sets. An anonymized version of the data set is available at 10.5281/zenodo.5764021.
 The script follows the structure of the aforementioned publication to enhance clarity.
 The format of the script is R Markdown (.Rmd).
