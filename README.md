@@ -11,11 +11,11 @@ doi:
 date-released: 2022-05-04
 url: https://github.com/github/ac-gieshoff/interpreting-accuracy
 message: "\nPlease cite as well the following publication"
-authors:
-- family-names: "Gieshoff"
+- authors:
+family-names: "Gieshoff"
   given-names: "Anne Catherine"
   orcid: "0000-0002-4383-190X"
- - family-names: "Albl-Mikasa"
+family-names: "Albl-Mikasa"
   given-names: "Michaela"
   orcid: "0000-0003-0933-574X"
 title: "Interpreting accuracy revisited: A refined approach to interpreting performance analysis."
