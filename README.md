@@ -10,7 +10,7 @@ version: 1.0
 doi: 
 date-released: 2022-05-04
 url: https://github.com/github/ac-gieshoff/interpreting-accuracy
-- message: "/nPlease cite as well the following publication"
+message: "\nPlease cite as well the following publication"
 authors:
 - family-names: "Gieshoff"
   given-names: "Anne Catherine"
